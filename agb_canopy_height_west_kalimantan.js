@@ -23,6 +23,15 @@
  *    NASA's Global Ecosystem Dynamics Investigation (GEDI) lidar mission.
  *    Remote Sensing of Environment, 270, 112845.
  *    https://doi.org/10.1016/j.rse.2021.112845
+ *
+ *    Gupta, K., et al. (2018). An index for discrimination of mangroves from
+ *    non-mangroves using LANDSAT 8 OLI imagery. MethodsX, 5, 1129-1139.
+ *    https://doi.org/10.1016/j.mex.2018.09.011
+ *
+ *    Baloloy, A. B., et al. (2020). Development and application of a new
+ *    mangrove vegetation index (MVI) for rapid and accurate mangrove mapping.
+ *    ISPRS Journal of Photogrammetry and Remote Sensing, 166, 95-117.
+ *    https://doi.org/10.1016/j.isprsjprs.2020.06.001
 
  * ========================================================================== */
 
