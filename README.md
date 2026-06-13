@@ -104,7 +104,7 @@ S2 bands + indices + CH_m
 
 ## How to Run
 
-1. Open the script in the [Google Earth Engine Code Editor](https://code.earthengine.google.com).
+1. Open the script in the [Google Earth Engine Code Editor](https://code.earthengine.google.com/3a2339dbb81fbe09462698dcbd770bc5).
 2. Copy `agb_canopy_height_west_kalimantan.js` into a new GEE script.
 3. Import the following asset through the **Imports** panel:
    - `aoi` -- `ee.Geometry` covering the target mangrove area
