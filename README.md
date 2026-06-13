@@ -17,7 +17,7 @@ A reproducible **two-stage Random Forest regression** workflow for wall-to-wall 
 
 ## Background
 
-Accurate estimation of mangrove biomass and canopy structure is critical for carbon accounting, ecosystem monitoring, and conservation planning. Conventional field-based approaches are limited in spatial coverage, while single-stage spectral regression from optical imagery often underperforms due to the spectral saturation of dense canopy. This repository implements a two-stage approach in which GEDI spaceborne lidar provides wall-to-wall canopy height as a structural intermediate, substantially improving AGBD prediction accuracy over a direct spectral-to-biomass model.
+Accurate estimation of mangrove biomass and canopy structure is critical for carbon accounting, ecosystem monitoring, and conservation planning. Conventional field-based approaches are limited in spatial coverage, while single-stage spectral regression from optical imagery often underperforms due to the spectral saturation of dense canopy. The integration of GEDI lidar with multispectral imagery for canopy height mapping has been demonstrated at global scale by Potapov et al. (2020), who combined GEDI and Landsat to produce a wall-to-wall forest height product. This repository adapts that concept to the mangrove domain using Sentinel-2, implementing a two-stage approach in which GEDI-derived canopy height serves as a structural intermediate predictor for AGBD estimation, substantially improving accuracy over a direct spectral-to-biomass model.
 
 GEDI L4A AGBD values are derived from the model of Duncanson et al. (2022), which converts GEDI RH metrics to above-ground biomass density in Mg/ha. The Global Mangrove Watch v3 extent layer (Bunting et al. 2022) constrains all analysis to confirmed mangrove pixels.
 
@@ -104,11 +104,10 @@ S2 bands + indices + CH_m
 
 ## How to Run
 
-1. Open the script in the [Google Earth Engine Code Editor](https://code.earthengine.google.com/3a2339dbb81fbe09462698dcbd770bc5).
+1. Open the script in the [Google Earth Engine Code Editor](https://code.earthengine.google.com/e2b3c1738f3769c1657cec4db2c1ac18).
 2. Copy `agb_canopy_height_west_kalimantan.js` into a new GEE script.
 3. Import the following asset through the **Imports** panel:
    - `aoi` -- `ee.Geometry` covering the target mangrove area
-   - or you can draw the aoi by 'Draw a Shape' and/or 'Draw a Rectangle' tools
 4. Click **Run**. Stage 1 and Stage 2 models train sequentially. The interactive sidebars populate after server-side computation completes (typically 30 to 60 seconds depending on AOI size).
 5. Submit the **Export** tasks from the Tasks panel to push outputs to Google Drive.
 
@@ -250,17 +249,18 @@ If this work supports your research or project:
 
 ## References
 
-- Duncanson, L., Kellner, J. R., Armston, J., Dubayah, R., Disney, M., Healey, S. P., ... & Hancock, S. (2022). Aboveground biomass density models for NASA's Global Ecosystem Dynamics Investigation (GEDI) lidar mission. Remote Sensing of Environment, 270, 112845. https://doi.org/10.1016/j.rse.2021.112845
-- Bunting, P., Rosenqvist, A., Hilarides, L., Lucas, R. M., Thomas, N., Tadono, T., ... & Rebelo, L. M. (2022). Global mangrove extent change 1996-2020: Global Mangrove Watch Version 3.0. Remote Sensing, 14(15), 3657. https://doi.org/10.3390/rs14153657
-- Gupta, K., Mukhopadhyay, A., Giri, S., Chanda, A., Majumdar, S. D., Samanta, S., ... & Hazra, S. (2018). An index for discrimination of mangroves from non-mangroves using LANDSAT 8 OLI imagery. MethodsX, 5, 1129-1139. https://doi.org/10.1016/j.mex.2018.09.011
 - Baloloy, A. B., Blanco, A. C., Ana, R. R. C. S., & Nadaoka, K. (2020). Development and application of a new mangrove vegetation index (MVI) for rapid and accurate mangrove mapping. ISPRS Journal of Photogrammetry and Remote Sensing, 166, 95-117. https://doi.org/10.1016/j.isprsjprs.2020.06.001
+- Bunting, P., Rosenqvist, A., Hilarides, L., Lucas, R. M., Thomas, N., Tadono, T., ... & Rebelo, L. M. (2022). Global mangrove extent change 1996-2020: Global Mangrove Watch Version 3.0. Remote Sensing, 14(15), 3657. https://doi.org/10.3390/rs14153657
+- Duncanson, L., Kellner, J. R., Armston, J., Dubayah, R., Disney, M., Healey, S. P., ... & Hancock, S. (2022). Aboveground biomass density models for NASA's Global Ecosystem Dynamics Investigation (GEDI) lidar mission. Remote Sensing of Environment, 270, 112845. https://doi.org/10.1016/j.rse.2021.112845
+- Gupta, K., Mukhopadhyay, A., Giri, S., Chanda, A., Majumdar, S. D., Samanta, S., ... & Hazra, S. (2018). An index for discrimination of mangroves from non-mangroves using LANDSAT 8 OLI imagery. MethodsX, 5, 1129-1139. https://doi.org/10.1016/j.mex.2018.09.011
 - Main-Knorn, M., Pflug, B., Louis, J., Debaecker, V., Muller-Wilm, U., & Gascon, F. (2017). Sen2Cor for Sentinel-2. Image and Signal Processing for Remote Sensing XXIII, 10427, 37-48. https://doi.org/10.1117/12.2278218
+- Potapov, P., Li, X., Hernandez-Serna, A., Tyukavina, A., Hansen, M. C., Kommareddy, A., Pickens, A., Turubanova, S., Tang, H., Silva, C. E., Armston, J., Dubayah, R., Blair, J. B., & Hofton, M. (2020). Mapping global forest canopy height through integration of GEDI and Landsat data. Remote Sensing of Environment, 253, 112165. https://doi.org/10.1016/j.rse.2020.112165
 
 ---
 
 ## Acknowledgements
 
-This repository is a personal portfolio project developed to demonstrate applied geospatial data science methodology. Academic background: Master of Remote Sensing, Faculty of Geography, Universitas Gadjah Mada.
+This repository is a personal portfolio project developed to demonstrate applied geospatial data science methodology.
 
 Datasets are provided by NASA (GEDI), the European Space Agency (Sentinel-2), and the Global Mangrove Watch consortium. Processing was conducted on the Google Earth Engine platform.
 
