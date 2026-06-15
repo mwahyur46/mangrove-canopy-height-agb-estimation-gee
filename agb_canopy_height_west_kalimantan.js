@@ -1,5 +1,5 @@
 /* ============================================================================
- *  Mangrove Canopy Height + Above-Ground Biomass Estimation
+ *  Mangrove Canopy Height + Above-Ground Biomass + Carbon Stock Estimation
  *  West Kalimantan Mangrove Coast
  *
  *  Two-stage RF regression:
@@ -11,6 +11,9 @@
  *              Predictors: S2 + indices (NDVI/NDWI/MNDWI/NDMI/NDRE/SAVI/EVI) + CH map (Stage 1)
  *              Output: wall-to-wall AGB map (masked to GMW mangrove)
  *
+ *    Stage 3 — Carbon stock: derived as AGB x 0.451 (IPCC Wetlands Supplement 2013)
+ *              Output: wall-to-wall carbon stock map (Mg C/ha)
+ *
  *  Author  : Muhammad Wahyu Ramadhan
  *  GitHub  : github.com/mwahyur46
  *  LinkedIn: linkedin.com/in/mwahyur
@@ -19,6 +22,11 @@
  *    aoi  — ee.Geometry covering West Kalimantan Mangrove Coast
  *
  *  References:
+ *    Baloloy, A. B., et al. (2020). Development and application of a new
+ *    mangrove vegetation index (MVI) for rapid and accurate mangrove mapping.
+ *    ISPRS Journal of Photogrammetry and Remote Sensing, 166, 95-117.
+ *    https://doi.org/10.1016/j.isprsjprs.2020.06.001
+ *
  *    Duncanson, L., et al. (2022). Aboveground biomass density models for
  *    NASA's Global Ecosystem Dynamics Investigation (GEDI) lidar mission.
  *    Remote Sensing of Environment, 270, 112845.
@@ -28,11 +36,16 @@
  *    non-mangroves using LANDSAT 8 OLI imagery. MethodsX, 5, 1129-1139.
  *    https://doi.org/10.1016/j.mex.2018.09.011
  *
- *    Baloloy, A. B., et al. (2020). Development and application of a new
- *    mangrove vegetation index (MVI) for rapid and accurate mangrove mapping.
- *    ISPRS Journal of Photogrammetry and Remote Sensing, 166, 95-117.
- *    https://doi.org/10.1016/j.isprsjprs.2020.06.001
-
+ *    Potapov, P., et al. (2020). Mapping global forest canopy height through
+ *    integration of GEDI and Landsat data. Remote Sensing of Environment,
+ *    253, 112165. https://doi.org/10.1016/j.rse.2020.112165
+ *
+ *    IPCC (2014). 2013 Supplement to the 2006 IPCC Guidelines for National
+ *    Greenhouse Gas Inventories: Wetlands. Chapter 4 (Coastal Wetlands).
+ *    Hiraishi, T., Krug, T., Tanabe, K., Srivastava, N., Baasansuren, J.,
+ *    Fukuda, M. & Troxler, T.G. (eds). IPCC, Switzerland.
+ *    Tier 1 default carbon fraction for mangrove AGB: 0.451 (45.1%).
+ *    https://www.ipcc-nggip.iges.or.jp/public/wetlands/
  * ========================================================================== */
 
 // ============================================================================
@@ -46,6 +59,7 @@ var CLOUD_PCT        = 20;
 var SPLIT            = 0.7;
 var N_TREES          = 500;
 var GMW_ASSET        = 'projects/earthengine-legacy/assets/projects/sat-io/open-datasets/GMW/extent/gmw_v3_2020_vec';
+var CARBON_FRACTION  = 0.451;  // IPCC (2014) Wetlands Supplement, Chapter 4 -- mangrove Tier 1 default
 
 Map.centerObject(aoi, 9.5);
 
@@ -317,7 +331,7 @@ var agb_map = agb_stack.classify(rf_agb).rename('AGB_Mgha').updateMask(gmw_mask)
 var agb_layer = ui.Map.Layer(
   agb_map,
   {min: 50, max: 200, palette: ['ffffcc','c2e699','78c679','31a354','006837']},
-  'AGB estimate (Mg/ha)', true, 1
+  'AGB estimate (Mg/ha)', false, 1
 );
 Map.layers().add(agb_layer);
 
@@ -361,6 +375,51 @@ print('Bias:', agb_bias, 'Mg/ha');
 var agb_imp = ee.Dictionary(rf_agb.explain().get('importance'));
 
 // ============================================================================
+// STAGE 3 — CARBON STOCK (derived from AGB)
+// ============================================================================
+// Linear conversion: Carbon (Mg C/ha) = AGB (Mg/ha) x 0.451
+//
+// Carbon fraction reference:
+//   IPCC (2014). 2013 Supplement to the 2006 IPCC Guidelines for National
+//   Greenhouse Gas Inventories: Wetlands. Chapter 4 (Coastal Wetlands).
+//   Tier 1 default carbon fraction for mangrove AGB = 0.451 (45.1%).
+//   This is the gold-standard reference used by Global Mangrove Watch and
+//   national greenhouse gas inventories for blue carbon accounting.
+var carbon_stock = agb_map.multiply(CARBON_FRACTION)
+                           .rename('Carbon_MgC_ha')
+                           .updateMask(gmw_mask);
+
+var carbon_layer = ui.Map.Layer(
+  carbon_stock,
+  {min: 25, max: 90, palette: ['f7f4f9','d4b9da','c994c7','df65b0','980043']},
+  'Carbon stock (Mg C/ha)', true, 1
+);
+Map.layers().add(carbon_layer);
+
+print('Stage 3 (Carbon stock) derived.');
+
+// Carbon stock distribution stats
+var carbon_stats = carbon_stock.reduceRegion({
+  reducer  : ee.Reducer.mean()
+              .combine({reducer2: ee.Reducer.stdDev(),        sharedInputs: true})
+              .combine({reducer2: ee.Reducer.minMax(),        sharedInputs: true})
+              .combine({reducer2: ee.Reducer.percentile([50]), sharedInputs: true})
+              .combine({reducer2: ee.Reducer.sum(),           sharedInputs: true}),
+  geometry : aoi,
+  scale    : 25,
+  maxPixels: 1e10,
+  tileScale: 8
+});
+
+print('Carbon stock distribution stats:', carbon_stats);
+
+// Total carbon: pixel sum x pixel area (25m x 25m = 625 m2 = 0.0625 ha)
+var carbon_total_Mg = ee.Number(carbon_stats.get('Carbon_MgC_ha_sum'))
+                       .multiply(0.0625);
+
+print('Total carbon stock (Mg C):', carbon_total_Mg);
+
+// ============================================================================
 // 8. CONSOLE CHARTS
 // ============================================================================
 print(ui.Chart.feature.byFeature({
@@ -389,7 +448,7 @@ var leftPanel = ui.Panel({
   style : {width: '300px', padding: '12px', backgroundColor: 'white'}
 });
 
-leftPanel.add(ui.Label('Mangrove CH + AGB Estimation',
+leftPanel.add(ui.Label('Mangrove CH + AGB + Carbon Stock',
               {fontWeight: 'bold', fontSize: '16px', margin: '0 0 2px 0'}));
 leftPanel.add(ui.Label('West Kalimantan Mangrove Coast — 2025',
               {fontSize: '12px', color: '#444', margin: '0 0 2px 0'}));
@@ -416,6 +475,26 @@ for (var i = 0; i < Map.layers().length(); i++) {
     leftPanel.add(cb);
   })(i);
 }
+
+leftPanel.add(ui.Label('', {height: '1px', backgroundColor: '#ccc',
+              margin: '8px 0', stretch: 'horizontal'}));
+
+// Carbon stock legend -- continuous horizontal gradient (purple sequential)
+leftPanel.add(ui.Label('Carbon Stock (Mg C/ha)',
+              {fontWeight: 'bold', fontSize: '12px', margin: '0 0 4px 0'}));
+leftPanel.add(ui.Thumbnail({
+  image : ee.Image.pixelLonLat().select('longitude').unitScale(-180, 180)
+             .visualize({min: 0, max: 1,
+                         palette: ['f7f4f9','d4b9da','c994c7','df65b0','980043']}),
+  params: {bbox: [-180, -1, 180, 1], dimensions: '256x16'},
+  style : {stretch: 'horizontal', height: '16px', margin: '0', padding: '0'}
+}));
+leftPanel.add(ui.Panel([
+  ui.Label('25',  {fontSize: '10px', margin: '2px 0'}),
+  ui.Label('45',  {fontSize: '10px', margin: '2px 0', stretch: 'horizontal', textAlign: 'center'}),
+  ui.Label('65',  {fontSize: '10px', margin: '2px 0', stretch: 'horizontal', textAlign: 'center'}),
+  ui.Label('90+', {fontSize: '10px', margin: '2px 0'})
+], ui.Panel.Layout.flow('horizontal'), {stretch: 'horizontal'}));
 
 leftPanel.add(ui.Label('', {height: '1px', backgroundColor: '#ccc',
               margin: '8px 0', stretch: 'horizontal'}));
@@ -461,6 +540,14 @@ leftPanel.add(ui.Label('', {height: '1px', backgroundColor: '#ccc',
               margin: '8px 0', stretch: 'horizontal'}));
 
 // Opacity sliders
+leftPanel.add(ui.Label('Carbon Stock Layer Opacity',
+              {fontWeight: 'bold', fontSize: '12px', margin: '0 0 2px 0'}));
+leftPanel.add(ui.Slider({
+  min: 0, max: 1, value: 1, step: 0.05,
+  onChange: function(v) { carbon_layer.setOpacity(v); },
+  style: {stretch: 'horizontal'}
+}));
+
 leftPanel.add(ui.Label('AGB Layer Opacity',
               {fontWeight: 'bold', fontSize: '12px', margin: '0 0 2px 0'}));
 leftPanel.add(ui.Slider({
@@ -503,7 +590,8 @@ Map.onClick(function(coords) {
   var point     = ee.Geometry.Point([coords.lon, coords.lat]);
   var sampleImg = agb_stack
     .addBands(ch_map)
-    .addBands(agb_map);
+    .addBands(agb_map)
+    .addBands(carbon_stock);
 
   sampleImg.reduceRegion({
     reducer: ee.Reducer.first(), geometry: point, scale: 25
@@ -518,6 +606,10 @@ Map.onClick(function(coords) {
                     {fontSize: '11px', color: '#c00'}));
       return;
     }
+    inspectorContent.add(ui.Label(
+      'Carbon stock: ' + (vals['Carbon_MgC_ha'] !== null ? vals['Carbon_MgC_ha'].toFixed(2) : 'n/a') + ' Mg C/ha',
+      {fontSize: '12px', fontWeight: 'bold', color: '#980043', margin: '0 0 2px 0'}
+    ));
     inspectorContent.add(ui.Label(
       'AGB: ' + vals['AGB_Mgha'].toFixed(2) + ' Mg/ha',
       {fontSize: '12px', fontWeight: 'bold', color: '#31a354', margin: '0 0 2px 0'}
@@ -637,6 +729,46 @@ function addRegressionBlock(parent, title, r2_ee, rmse_ee, mae_ee, bias_ee,
   }));
 }
 
+// ============================================================
+// Carbon Stock block (top) -- derived, not modeled
+// ============================================================
+rightPanel.add(ui.Label('Carbon Stock Estimation (Stage 3)',
+              {fontWeight: 'bold', fontSize: '14px', margin: '4px 0 4px 0', color: '#222'}));
+rightPanel.add(ui.Label('Derived: AGB x 0.451 (IPCC carbon fraction)',
+              {fontSize: '11px', color: '#666', margin: '0 0 2px 0'}));
+
+var cMean   = ui.Label('Mean      : computing...', {fontSize: '12px', margin: '2px 0'});
+var cMedian = ui.Label('Median    : computing...', {fontSize: '12px', margin: '2px 0'});
+var cStd    = ui.Label('Std Dev   : computing...', {fontSize: '12px', margin: '2px 0'});
+var cMin    = ui.Label('Min       : computing...', {fontSize: '12px', margin: '2px 0'});
+var cMax    = ui.Label('Max       : computing...', {fontSize: '12px', margin: '2px 0'});
+var cTotal  = ui.Label('Total C   : computing...', {fontSize: '12px', margin: '2px 0', fontWeight: 'bold'});
+
+rightPanel.add(cMean);
+rightPanel.add(cMedian);
+rightPanel.add(cStd);
+rightPanel.add(cMin);
+rightPanel.add(cMax);
+rightPanel.add(cTotal);
+
+carbon_stats.evaluate(function(s) {
+  if (!s) return;
+  cMean.setValue(  'Mean      : ' + s['Carbon_MgC_ha_mean'].toFixed(2)    + ' Mg C/ha');
+  cMedian.setValue('Median    : ' + s['Carbon_MgC_ha_p50'].toFixed(2)     + ' Mg C/ha');
+  cStd.setValue(   'Std Dev   : ' + s['Carbon_MgC_ha_stdDev'].toFixed(2)  + ' Mg C/ha');
+  cMin.setValue(   'Min       : ' + s['Carbon_MgC_ha_min'].toFixed(2)     + ' Mg C/ha');
+  cMax.setValue(   'Max       : ' + s['Carbon_MgC_ha_max'].toFixed(2)     + ' Mg C/ha');
+});
+carbon_total_Mg.evaluate(function(v) {
+  cTotal.setValue('Total C   : ' + (v / 1000).toFixed(2) + ' kt C');
+});
+
+rightPanel.add(ui.Label('Ref: IPCC (2014) Wetlands Supplement, Chapter 4; carbon fraction = 0.451',
+              {fontSize: '10px', color: '#666', margin: '4px 0'}));
+
+rightPanel.add(ui.Label('', {height: '1px', backgroundColor: '#ccc',
+              margin: '8px 0', stretch: 'horizontal'}));
+
 // AGB block (atas)
 addRegressionBlock(
   rightPanel,
@@ -665,7 +797,7 @@ addRegressionBlock(
   ch_imp,
   N_TREES, ch_train.size(), ch_test.size(),
   '2019-2025', '2025',
-  'Ref: GEDI L2A RH98 (quality_flag == 1)'
+  'Ref: GEDI L2A RH98 (quality_flag == 1); CH mapping adapted from Potapov et al. (2020)'
 );
 
 ui.root.add(rightPanel);
@@ -711,4 +843,12 @@ Export.table.toDrive({
   description   : 'ch_test_predictions_west_kalimantan',
   fileNamePrefix: 'ch_test_predictions_west_kalimantan',
   folder        : EXPORT_FOLDER, fileFormat: 'CSV'
+});
+
+Export.image.toDrive({
+  image         : carbon_stock.toFloat(),
+  description   : 'carbon_stock_map_west_kalimantan_2025',
+  fileNamePrefix: 'carbon_stock_map_west_kalimantan_2025',
+  folder        : EXPORT_FOLDER,
+  region        : aoi, scale: 25, maxPixels: 1e10, fileFormat: 'GeoTIFF'
 });

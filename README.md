@@ -1,4 +1,4 @@
-# Mangrove Canopy Height and Above-Ground Biomass Estimation (GEE)
+# Mangrove Canopy Height, Above-Ground Biomass, and Carbon Stock Estimation (GEE)
 
 ![Platform](https://img.shields.io/badge/platform-Google%20Earth%20Engine-4285F4.svg)
 ![Language](https://img.shields.io/badge/language-JavaScript-yellow.svg)
@@ -7,17 +7,17 @@
 ![Status](https://img.shields.io/badge/status-completed-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-A reproducible **two-stage Random Forest regression** workflow for wall-to-wall mapping of mangrove **canopy height (CH)** and **above-ground biomass density (AGBD)** along the **West Kalimantan Mangrove Coast**, implemented entirely in **Google Earth Engine**. Stage 1 estimates canopy height from GEDI L2A RH98 footprints as training labels; Stage 2 uses the resulting wall-to-wall CH map as an additional predictor for AGBD estimation against GEDI L4A ground truth. Mangrove extent is constrained using the **Global Mangrove Watch v3 (2020)** mask. The script ships with an interactive dual-sidebar UI (layer toggles, gradient legends, opacity sliders, pixel inspector, and per-model performance panels).
+A reproducible **two-stage Random Forest regression** workflow for wall-to-wall mapping of mangrove **canopy height (CH)**, **above-ground biomass density (AGBD)**, and **carbon stock** along the **West Kalimantan Mangrove Coast**, implemented entirely in **Google Earth Engine**. Stage 1 estimates canopy height from GEDI L2A RH98 footprints as training labels; Stage 2 uses the resulting wall-to-wall CH map as an additional predictor for AGBD estimation against GEDI L4A ground truth. Carbon stock is derived from AGB via the IPCC (2014) Wetlands Supplement default carbon fraction for mangrove (0.451). Mangrove extent is constrained using the **Global Mangrove Watch v3 (2020)** mask. The script ships with an interactive dual-sidebar UI (layer toggles, gradient legends, opacity sliders, pixel inspector, and per-model performance panels).
 
 <p align="center">
-  <img src="images/map_overview.png" alt="Full map view with AGB estimate and dual sidebars" width="95%">
+  <img src="images/map_overview.png" alt="Full map view with carbon stock estimate and dual sidebars" width="95%">
 </p>
 
 ---
 
 ## Background
 
-Accurate estimation of mangrove biomass and canopy structure is critical for carbon accounting, ecosystem monitoring, and conservation planning. Conventional field-based approaches are limited in spatial coverage, while single-stage spectral regression from optical imagery often underperforms due to the spectral saturation of dense canopy. The integration of GEDI lidar with multispectral imagery for canopy height mapping has been demonstrated at global scale by Potapov et al. (2020), who combined GEDI and Landsat to produce a wall-to-wall forest height product. This repository adapts that concept to the mangrove domain using Sentinel-2, implementing a two-stage approach in which GEDI-derived canopy height serves as a structural intermediate predictor for AGBD estimation, substantially improving accuracy over a direct spectral-to-biomass model.
+Accurate estimation of mangrove biomass, canopy structure, and carbon stock is critical for blue carbon accounting, ecosystem monitoring, and conservation planning. Conventional field-based approaches are limited in spatial coverage, while single-stage spectral regression from optical imagery often underperforms due to the spectral saturation of dense canopy. The integration of GEDI lidar with multispectral imagery for canopy height mapping has been demonstrated at global scale by Potapov et al. (2020), who combined GEDI and Landsat to produce a wall-to-wall forest height product. This repository adapts that concept to the mangrove domain using Sentinel-2, implementing a two-stage approach in which GEDI-derived canopy height serves as a structural intermediate predictor for AGBD estimation, substantially improving accuracy over a direct spectral-to-biomass model. Carbon stock is subsequently derived from the AGB map using the Tier 1 default carbon fraction from the IPCC (2014) Wetlands Supplement, Chapter 4 (Coastal Wetlands).
 
 GEDI L4A AGBD values are derived from the model of Duncanson et al. (2022), which converts GEDI RH metrics to above-ground biomass density in Mg/ha. The Global Mangrove Watch v3 extent layer (Bunting et al. 2022) constrains all analysis to confirmed mangrove pixels.
 
@@ -27,20 +27,26 @@ GEDI L4A AGBD values are derived from the model of Duncanson et al. (2022), whic
 
 ```
 mangrove-canopy-height-agb-estimation-gee/
-|-- agb_canopy_height_west_kalimantan.js   # two-stage CH + AGB estimation
+|-- agb_canopy_height_west_kalimantan.js   # two-stage CH + AGB + carbon stock estimation
 |-- images/
 |   |-- map_overview.png
+|   |-- carbon_stock_map.png
 |   |-- agb_map.png
 |   |-- canopy_height_map.png
 |   |-- false_color_mangrove.png
 |   |-- gedi_footprints.png
+|   |-- right_panel_carbon.png
 |   |-- right_panel_agb.png
 |   |-- right_panel_ch.png
+|   |-- pixel_inspector_carbon.png
 |   |-- pixel_inspector.png
 |   |-- scatterplot_agb.png
 |   |-- scatterplot_ch.png
 |   |-- fimportance_agb.png
 |   |-- fimportance_ch.png
+|   |-- full_map.png
+|   |-- full_right_panel_agb.png
+|   |-- full_right_panel_ch.png
 |-- README.md
 |-- LICENSE
 ```
@@ -49,7 +55,7 @@ mangrove-canopy-height-agb-estimation-gee/
 
 ## Method
 
-The workflow runs entirely server-side in Google Earth Engine and produces two wall-to-wall raster outputs masked to GMW mangrove extent.
+The workflow runs entirely server-side in Google Earth Engine and produces three wall-to-wall raster outputs masked to GMW mangrove extent.
 
 | Step | Description |
 |------|-------------|
@@ -62,8 +68,9 @@ The workflow runs entirely server-side in Google Earth Engine and produces two w
 | 7 | Filter **GEDI L4A** (2019-2025, l4_quality_flag > 0.3); compute mean AGBD per pixel. |
 | 8 | Train **Stage 2 RF regressor** on S2 feature stack + CH map as additional predictor. |
 | 9 | Apply Stage 2 model to produce **wall-to-wall AGB map**. |
-| 10 | Evaluate both models with R2, RMSE, MAE, and Bias on held-out test set. |
-| 11 | Export rasters and test prediction tables to Google Drive. |
+| 10 | Derive **carbon stock map**: AGB x 0.451 (IPCC 2014 Wetlands Supplement, Chapter 4). |
+| 11 | Evaluate both RF models with R2, RMSE, MAE, and Bias on held-out test set. |
+| 12 | Export rasters and test prediction tables to Google Drive. |
 
 ### Two-Stage Architecture
 
@@ -79,6 +86,10 @@ S2 bands + indices + CH_m
    [Stage 2 RF]  <-- GEDI L4A AGBD (training labels)
         |
   AGB map (wall-to-wall)
+        |
+  AGB x 0.451
+        |
+  Carbon stock map (wall-to-wall)
 ```
 
 ### Spectral Indices
@@ -104,14 +115,14 @@ S2 bands + indices + CH_m
 
 ## How to Run
 
-1. Open the script in the [Google Earth Engine Code Editor](https://code.earthengine.google.com/e2b3c1738f3769c1657cec4db2c1ac18).
+1. Open the script in the [Google Earth Engine Code Editor](https://code.earthengine.google.com).
 2. Copy `agb_canopy_height_west_kalimantan.js` into a new GEE script.
 3. Import the following asset through the **Imports** panel:
    - `aoi` -- `ee.Geometry` covering the target mangrove area
 4. Click **Run**. Stage 1 and Stage 2 models train sequentially. The interactive sidebars populate after server-side computation completes (typically 30 to 60 seconds depending on AOI size).
 5. Submit the **Export** tasks from the Tasks panel to push outputs to Google Drive.
 
-> **Note on reproducibility.** Google Earth Engine's Random Forest implementation (`smileRandomForest`) does not expose a fixed random seed for tree building. Model performance metrics may vary slightly across runs due to stochastic variation in the RF ensemble and server-side tile partitioning during sampling. Results reported here represent a representative run; the typical range across multiple runs is noted in the Results section.
+> **Note on reproducibility.** Google Earth Engine's Random Forest implementation (`smileRandomForest`) does not expose a fixed random seed for tree building. Model performance metrics may vary slightly across runs due to stochastic variation in the RF ensemble and server-side tile partitioning during sampling. Results reported here represent a representative run. Larger deviations may occur during periods of high GEE server load. For publication-grade reproducibility, exporting the sample CSV and retraining in Python (scikit-learn with `random_state=42`) is recommended.
 
 ---
 
@@ -119,21 +130,22 @@ S2 bands + indices + CH_m
 
 The script renders a docked dual-sidebar layout eliminating the need to navigate the GEE Console for metrics.
 
-### Left Panel: Layer Controls, Legend, and Pixel Inspector
+### Left Panel: Layer Controls, Legends, and Pixel Inspector
 
-Layer checkboxes toggle each map layer. Continuous gradient legends are shown for both AGB (Mg/ha) and canopy height (m). Two opacity sliders allow independent transparency control of the AGB and CH estimate layers. The pixel inspector populates on map click with AGB estimate, canopy height estimate, and all predictor band values.
+Layer checkboxes toggle each map layer. Continuous gradient legends are shown for Carbon Stock (Mg C/ha, purple), AGB (Mg/ha, green), and Canopy Height (m, yellow-red). Three independent opacity sliders allow transparency control of each estimate layer. The pixel inspector populates on map click with carbon stock, AGB, canopy height, and all predictor band values.
 
 <p align="center">
-  <img src="images/pixel_inspector.png" alt="Pixel inspector showing AGB, canopy height, and band values" width="40%">
+  <img src="images/pixel_inspector_carbon.png" alt="Pixel inspector showing carbon stock, AGB, canopy height, and band values" width="40%">
 </p>
 
 ### Right Panel: Model Performance
 
-Both models are reported in the right panel -- AGB (Stage 2) at the top, CH (Stage 1) below. Each block shows R2, RMSE, MAE, Bias, training info, a scatter plot of observed vs predicted, and a feature importance chart.
+Three blocks are shown in the right panel -- Carbon Stock (Stage 3) at the top, AGB (Stage 2) in the middle, and CH (Stage 1) at the bottom. The carbon stock block reports distributional statistics (mean, median, std dev, min, max, total carbon in kt C). Each RF model block shows R2, RMSE, MAE, Bias, training info, scatter plot, and feature importance chart.
 
 <p align="center">
-  <img src="images/right_panel_agb.png" alt="Right panel: AGB model performance" width="45%">
-  <img src="images/right_panel_ch.png" alt="Right panel: CH model performance" width="45%">
+  <img src="images/right_panel_carbon.png" alt="Right panel: Carbon Stock Estimation block" width="32%">
+  <img src="images/right_panel_agb.png" alt="Right panel: AGB model performance" width="32%">
+  <img src="images/right_panel_ch.png" alt="Right panel: CH model performance" width="32%">
 </p>
 
 ---
@@ -157,7 +169,7 @@ AOI: West Kalimantan Mangrove Coast (south of Pontianak, Kalimantan Barat, Indon
 
 | Order | Script | Description |
 |-------|--------|-------------|
-| 1 | `agb_canopy_height_west_kalimantan.js` | Main two-stage CH + AGB estimation |
+| 1 | `agb_canopy_height_west_kalimantan.js` | Two-stage CH + AGB estimation + carbon stock derivation |
 
 Run the script in GEE Code Editor with the `aoi` asset imported.
 
@@ -166,6 +178,10 @@ Run the script in GEE Code Editor with the `aoi` asset imported.
 ## Results
 
 ### Output Maps
+
+<p align="center">
+  <img src="images/carbon_stock_map.png" alt="Wall-to-wall carbon stock estimate (Mg C/ha)" width="95%">
+</p>
 
 <p align="center">
   <img src="images/agb_map.png" alt="Wall-to-wall AGB estimate (Mg/ha)" width="48%">
@@ -186,13 +202,25 @@ GEDI footprint distribution within the AOI (diagonal orbit pattern):
 
 ### Validation Metrics
 
-Results from a representative run. Due to stochastic variation in GEE's RF implementation, R2 values may vary by approximately +/-0.05 across runs under stable server conditions. Larger deviations may occur during periods of high GEE server load.
+Results from a representative run. Due to stochastic variation in GEE's RF implementation, R2 values may vary across runs -- see the note under How to Run.
 
 | Model | R2 | RMSE | MAE | Bias |
 |-------|----|------|-----|------|
-| Stage 1: Canopy Height (RH98) | 0.6480 | 4.642 m | 3.273 m | 0.113 m |
-| Stage 2: AGB (AGBD) | 0.6480 | 49.567 Mg/ha | 25.865 Mg/ha | 1.163 Mg/ha |
+| Stage 1: Canopy Height (RH98) | 0.3273 | 6.300 m | 4.651 m | -0.129 m |
+| Stage 2: AGB (AGBD) | 0.7279 | 38.790 Mg/ha | 23.956 Mg/ha | 0.960 Mg/ha |
 
+### Carbon Stock Statistics (AOI-wide)
+
+Derived from AGB map using IPCC (2014) carbon fraction = 0.451. No separate model validation applies -- uncertainty propagates directly from the AGB model.
+
+| Statistic | Value |
+|-----------|-------|
+| Mean | 47.33 Mg C/ha |
+| Median | 41.00 Mg C/ha |
+| Std Dev | 20.03 Mg C/ha |
+| Min | 3.90 Mg C/ha |
+| Max | 286.20 Mg C/ha |
+| **Total Carbon** | **5,588.79 kt C** |
 
 ### Scatter Plots: Observed vs Predicted
 
@@ -208,18 +236,18 @@ Results from a representative run. Due to stochastic variation in GEE's RF imple
   <img src="images/fimportance_agb.png" alt="Feature importance: Stage 2 AGB model" width="48%">
 </p>
 
-For the CH model, B6 (red-edge, 740 nm) is the dominant predictor, consistent with its sensitivity to canopy chlorophyll content and vertical structure. For the AGB model, CH_m is the single most important predictor by a large margin, validating the two-stage design. VV and VH SAR backscatter rank highly in both models in the comprehensive version (see Caveats).
+For the CH model, B6 (red-edge, 740 nm) is the dominant predictor, consistent with its sensitivity to canopy chlorophyll content and vertical structure. For the AGB model, CH_m is the single most important predictor by a large margin, validating the two-stage design.
 
 ### Caveats
 
 - **Model variability.** GEE's `smileRandomForest` does not support a fixed random seed for tree construction. Results may vary across runs. For publication-grade reproducibility, exporting the sample CSV and retraining in Python (scikit-learn with `random_state=42`) is recommended.
 - **GEDI footprint sparsity.** GEDI coverage follows a diagonal orbital pattern. Areas between orbit tracks are estimated by the RF model, not directly observed by GEDI. Prediction uncertainty is higher in under-sampled zones.
 - **Temporal mismatch.** Sentinel-2 composite uses 2025 imagery; GEDI labels span 2019-2025. Mangrove structural changes over this period are not accounted for.
-- **Public vs comprehensive version.** This script uses Sentinel-2 spectral indices as predictors. A comprehensive version incorporating Sentinel-1 SAR (VV/VH), SRTM slope, and additional mangrove-specific indices (CMRI, MVI) yields higher performance (CH R2: ~0.61, AGB R2: ~0.71) at the cost of additional data complexity. Results and UI from the comprehensive version are shown below.
+- **Carbon stock uncertainty.** The 0.451 carbon fraction is a Tier 1 global default. Species-specific or region-specific values may differ. Uncertainty in the AGB estimate propagates linearly to the carbon stock estimate.
 
 ### Enhanced Feature Set
 
-Adding Sentinel-1 SAR (VV/VH), SRTM slope, CMRI, and MVI to the feature stack improves model performance notably for the AGB model. The left panel subtitle reflects the expanded sensor stack ("S2 + S1 + SRTM + GEDI L2A/L4A").
+Adding Sentinel-1 SAR (VV/VH), SRTM slope, CMRI, and MVI to the feature stack improves model performance. The left panel subtitle reflects the expanded sensor stack.
 
 | Model | R2 | RMSE | MAE | Bias |
 |-------|----|------|-----|------|
@@ -227,15 +255,15 @@ Adding Sentinel-1 SAR (VV/VH), SRTM slope, CMRI, and MVI to the feature stack im
 | Stage 2: AGB (AGBD) | 0.7113 | 41.415 Mg/ha | 25.041 Mg/ha | 1.490 Mg/ha |
 
 <p align="center">
-  <img src="images/full_map.png" alt="Full map view: comprehensive version with AGB estimate" width="95%">
+  <img src="images/full_map.png" alt="Full map view: enhanced version with AGB estimate" width="95%">
 </p>
 
 <p align="center">
-  <img src="images/full_right_panel_agb.png" alt="Comprehensive version: AGB model performance panel" width="45%">
-  <img src="images/full_right_panel_agb_2.png" alt="Comprehensive version: CH model performance panel" width="45%">
+  <img src="images/full_right_panel_agb.png" alt="Enhanced version: AGB model performance panel" width="45%">
+  <img src="images/full_right_panel_ch.png" alt="Enhanced version: CH model performance panel" width="45%">
 </p>
 
-In the comprehensive version feature importance, **VV** ranks among the top predictors for CH alongside B6, confirming that SAR backscatter captures canopy structural information beyond what optical bands provide. For AGB, **CH_m** remains the dominant predictor, with VH and slope contributing meaningful secondary signal.
+In the enhanced version feature importance, VV ranks among the top predictors for CH alongside B6, confirming that SAR backscatter captures canopy structural information beyond what optical bands provide. For AGB, CH_m remains the dominant predictor, with VH and slope contributing meaningful secondary signal.
 
 ---
 
@@ -243,7 +271,7 @@ In the comprehensive version feature importance, **VV** ranks among the top pred
 
 If this work supports your research or project:
 
-> Ramadhan, M. W. (2026). *Mangrove Canopy Height and Above-Ground Biomass Estimation Using Two-Stage Random Forest and GEDI in Google Earth Engine*. GitHub repository. https://github.com/mwahyur46/mangrove-canopy-height-agb-estimation-gee
+> Ramadhan, M. W. (2026). *Mangrove Canopy Height, Above-Ground Biomass, and Carbon Stock Estimation Using Two-Stage Random Forest and GEDI in Google Earth Engine*. GitHub repository. https://github.com/mwahyur46/mangrove-canopy-height-agb-estimation-gee
 
 ---
 
@@ -253,6 +281,7 @@ If this work supports your research or project:
 - Bunting, P., Rosenqvist, A., Hilarides, L., Lucas, R. M., Thomas, N., Tadono, T., ... & Rebelo, L. M. (2022). Global mangrove extent change 1996-2020: Global Mangrove Watch Version 3.0. Remote Sensing, 14(15), 3657. https://doi.org/10.3390/rs14153657
 - Duncanson, L., Kellner, J. R., Armston, J., Dubayah, R., Disney, M., Healey, S. P., ... & Hancock, S. (2022). Aboveground biomass density models for NASA's Global Ecosystem Dynamics Investigation (GEDI) lidar mission. Remote Sensing of Environment, 270, 112845. https://doi.org/10.1016/j.rse.2021.112845
 - Gupta, K., Mukhopadhyay, A., Giri, S., Chanda, A., Majumdar, S. D., Samanta, S., ... & Hazra, S. (2018). An index for discrimination of mangroves from non-mangroves using LANDSAT 8 OLI imagery. MethodsX, 5, 1129-1139. https://doi.org/10.1016/j.mex.2018.09.011
+- IPCC (2014). 2013 Supplement to the 2006 IPCC Guidelines for National Greenhouse Gas Inventories: Wetlands. Chapter 4 (Coastal Wetlands). Hiraishi, T., Krug, T., Tanabe, K., Srivastava, N., Baasansuren, J., Fukuda, M. & Troxler, T.G. (eds). IPCC, Switzerland. https://www.ipcc-nggip.iges.or.jp/public/wetlands/
 - Main-Knorn, M., Pflug, B., Louis, J., Debaecker, V., Muller-Wilm, U., & Gascon, F. (2017). Sen2Cor for Sentinel-2. Image and Signal Processing for Remote Sensing XXIII, 10427, 37-48. https://doi.org/10.1117/12.2278218
 - Potapov, P., Li, X., Hernandez-Serna, A., Tyukavina, A., Hansen, M. C., Kommareddy, A., Pickens, A., Turubanova, S., Tang, H., Silva, C. E., Armston, J., Dubayah, R., Blair, J. B., & Hofton, M. (2020). Mapping global forest canopy height through integration of GEDI and Landsat data. Remote Sensing of Environment, 253, 112165. https://doi.org/10.1016/j.rse.2020.112165
 
@@ -260,7 +289,7 @@ If this work supports your research or project:
 
 ## Acknowledgements
 
-This repository is a personal portfolio project developed to demonstrate applied geospatial data science methodology.
+This repository is a personal portfolio project developed to demonstrate applied geospatial data science methodology. Academic background: Master of Remote Sensing, Faculty of Geography, Universitas Gadjah Mada.
 
 Datasets are provided by NASA (GEDI), the European Space Agency (Sentinel-2), and the Global Mangrove Watch consortium. Processing was conducted on the Google Earth Engine platform.
 
